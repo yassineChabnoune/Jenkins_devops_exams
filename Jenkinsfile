@@ -2,8 +2,8 @@ pipeline {
     agent any
 
     environment {
-        DOCKER_ID = "dockeridd36" 
-        DOCKER_IMAGE = "movie-service"
+        DOCKER_ID = "dockeridd36"  
+        DOCKER_IMAGE = "datascientestapi"
         DOCKER_TAG = "v.${BUILD_ID}.0"
     }
 
@@ -17,29 +17,33 @@ pipeline {
 
         stage('Docker Build') {
             steps {
-                sh 'docker build -t $DOCKER_ID/$DOCKER_IMAGE:$DOCKER_TAG ./movie-service'
+                sh '''
+                docker build -t $DOCKER_ID/$DOCKER_IMAGE:$DOCKER_TAG ./movie-service
+                '''
             }
         }
 
         stage('Run Container') {
             steps {
                 sh '''
-                docker rm -f test-container || true
-                docker run -d -p 8080:80 --name test-container $DOCKER_ID/$DOCKER_IMAGE:$DOCKER_TAG
+                docker rm -f jenkins || true
+                docker run -d -p 80:80 --name jenkins $DOCKER_ID/$DOCKER_IMAGE:$DOCKER_TAG
                 sleep 10
                 '''
             }
         }
 
-        stage('Test Application') {
+        stage('Test Acceptance') {
             steps {
-                sh 'curl -f http://localhost:8080 || true'
+                sh '''
+                curl localhost || true
+                '''
             }
         }
 
         stage('Docker Push') {
             environment {
-                DOCKER_PASS = credentials('DOCKER_HUB_PASS')
+                DOCKER_PASS = credentials("DOCKER_HUB_PASS")
             }
             steps {
                 sh '''
@@ -50,23 +54,72 @@ pipeline {
         }
 
         stage('Deploy Dev') {
+            environment {
+                KUBECONFIG = credentials("config")
+            }
             steps {
-                echo "Deploy skipped (explained in report)"
+                sh '''
+                rm -rf .kube
+                mkdir .kube
+                cat $KUBECONFIG > .kube/config
+
+                cp charts/values.yaml values.yaml
+                sed -i "s/tag:.*/tag: ${DOCKER_TAG}/" values.yaml
+
+                kubectl create namespace dev || true
+
+                helm upgrade --install app charts \
+                  --values values.yaml \
+                  --namespace dev
+                '''
             }
         }
 
         stage('Deploy Staging') {
+            environment {
+                KUBECONFIG = credentials("config")
+            }
             steps {
-                echo "Deploy skipped (explained in report)"
+                sh '''
+                rm -rf .kube
+                mkdir .kube
+                cat $KUBECONFIG > .kube/config
+
+                cp charts/values.yaml values.yaml
+                sed -i "s/tag:.*/tag: ${DOCKER_TAG}/" values.yaml
+
+                kubectl create namespace staging || true
+
+                helm upgrade --install app charts \
+                  --values values.yaml \
+                  --namespace staging
+                '''
             }
         }
 
         stage('Deploy Production') {
+            environment {
+                KUBECONFIG = credentials("config")
+            }
             steps {
                 timeout(time: 10, unit: 'MINUTES') {
                     input message: 'Deploy to production?', ok: 'Yes'
                 }
-                echo "Production deploy skipped"
+
+                sh '''
+                rm -rf .kube
+                mkdir .kube
+                cat $KUBECONFIG > .kube/config
+
+                cp charts/values.yaml values.yaml
+                sed -i "s/tag:.*/tag: ${DOCKER_TAG}/" values.yaml
+
+                kubectl create namespace prod || true
+
+                helm upgrade --install app charts \
+                  --values values.yaml \
+                  --namespace prod
+                '''
             }
         }
     }
