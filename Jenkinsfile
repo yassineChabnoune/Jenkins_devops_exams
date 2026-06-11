@@ -2,7 +2,7 @@ pipeline {
     agent any
 
     environment {
-        DOCKER_ID = "dockeridd36"  
+        DOCKER_ID = "dockeridd36" 
         DOCKER_IMAGE = "datascientestapi"
         DOCKER_TAG = "v.${BUILD_ID}.0"
     }
@@ -63,6 +63,9 @@ pipeline {
                 mkdir .kube
                 cat $KUBECONFIG > .kube/config
 
+                kubectl delete svc --all -n dev || true
+                kubectl delete deploy --all -n dev || true
+
                 cp charts/values.yaml values.yaml
                 sed -i "s/tag:.*/tag: ${DOCKER_TAG}/" values.yaml
 
@@ -84,6 +87,9 @@ pipeline {
                 rm -rf .kube
                 mkdir .kube
                 cat $KUBECONFIG > .kube/config
+
+                kubectl delete svc --all -n staging || true
+                kubectl delete deploy --all -n staging || true
 
                 cp charts/values.yaml values.yaml
                 sed -i "s/tag:.*/tag: ${DOCKER_TAG}/" values.yaml
@@ -110,6 +116,9 @@ pipeline {
                 rm -rf .kube
                 mkdir .kube
                 cat $KUBECONFIG > .kube/config
+
+                kubectl delete svc --all -n prod || true
+                kubectl delete deploy --all -n prod || true
 
                 cp charts/values.yaml values.yaml
                 sed -i "s/tag:.*/tag: ${DOCKER_TAG}/" values.yaml
